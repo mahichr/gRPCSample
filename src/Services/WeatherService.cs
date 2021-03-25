@@ -29,12 +29,14 @@ namespace GrpcService.Server.Services
         {
             var httpClient = _httpClientFactory.CreateClient();
             var temperatures = await GetTemperaturesAsync(request, httpClient);
-            
+
             return new WeatherResponse
             {
                 Temperature = temperatures.Main.Temp,
                 FeelsLike = temperatures.Main.FeelsLike,
-                Timestamp = Timestamp.FromDateTime(DateTime.UtcNow)
+                Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                City = request.City,
+                Units = request.Units
             };
         }
 
@@ -53,10 +55,43 @@ namespace GrpcService.Server.Services
                 {
                     Temperature = temperatures.Main.Temp,
                     FeelsLike = temperatures.Main.FeelsLike,
-                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow)
+                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                    City = request.City,
+                    Units = request.Units
                 });
                 await Task.Delay(1000);
             }
+        }
+
+        public override async Task<MultiWeatherResponse> GetMultiCurrentWeatherStream(IAsyncStreamReader<GetCurrentWeatherForCityRequest> requestStream, ServerCallContext context)
+        {
+            var httpClient = _httpClientFactory.CreateClient();
+            var response = new MultiWeatherResponse
+            {
+                Weather = { }
+            };
+            await foreach (var request in requestStream.ReadAllAsync())
+            {
+                var temperatures = await GetTemperaturesAsync(request, httpClient);
+                response.Weather.Add(new WeatherResponse
+                {
+                    Temperature = temperatures.Main.Temp,
+                    FeelsLike = temperatures.Main.FeelsLike,
+                    Timestamp = Timestamp.FromDateTime(DateTime.UtcNow),
+                    City = request.City,
+                    Units = request.Units
+                });
+            }
+            return response;
+        }
+
+        public override async Task<Empty> PrintStream(IAsyncStreamReader<PrintRequest> requestStream, ServerCallContext context)
+        {
+            await foreach (var request in requestStream.ReadAllAsync())
+            {
+                _logger.LogInformation($"Client said: {request.Message}");
+            }
+            return new();
         }
 
         private async Task<Temperatures> GetTemperaturesAsync(GetCurrentWeatherForCityRequest request, HttpClient httpClient)
